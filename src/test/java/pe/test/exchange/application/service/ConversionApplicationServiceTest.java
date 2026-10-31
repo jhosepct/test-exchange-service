@@ -61,7 +61,7 @@ class ConversionApplicationServiceTest {
                 targetCurrency,
                 new BigDecimal("3.70"),
                 new BigDecimal("370.00"),
-                LocalDateTime.now()
+                LocalDateTime.of(2026, 1, 1, 0, 0)
         );
 
         when(exchangeDomainService.performConversion(amount, sourceCurrency, targetCurrency))

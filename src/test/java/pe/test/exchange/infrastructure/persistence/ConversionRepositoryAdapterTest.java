@@ -47,7 +47,7 @@ class ConversionRepositoryAdapterTest {
                 .targetCurrency("PEN")
                 .exchangeRate(new BigDecimal("3.70"))
                 .convertedAmount(new BigDecimal("370.00"))
-                .operationDate(LocalDateTime.now())
+                .operationDate(LocalDateTime.of(2026, 1, 1, 0, 0))
                 .build();
 
         when(jpaRepository.save(any(ConversionEntity.class))).thenReturn(savedEntity);

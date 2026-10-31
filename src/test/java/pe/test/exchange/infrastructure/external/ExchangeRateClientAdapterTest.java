@@ -120,8 +120,10 @@ class ExchangeRateClientAdapterTest {
                 .thenThrow(FeignException.errorStatus("getLatestRates", response));
 
         // Act
+        CurrencyCode sourceCurrency = new CurrencyCode("PEN");
+        CurrencyCode targetCurrency = new CurrencyCode("USD");
         ExchangeRateProviderException exception = assertThrows(ExchangeRateProviderException.class,
-                () -> adapter.getExchangeRate(new CurrencyCode("PEN"), new CurrencyCode("USD")));
+                () -> adapter.getExchangeRate(sourceCurrency, targetCurrency));
 
         // Assert
         assertEquals("invalid-key", exception.getErrorType());

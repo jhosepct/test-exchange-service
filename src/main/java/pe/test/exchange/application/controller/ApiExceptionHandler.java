@@ -22,25 +22,36 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ProblemDetail handleInvalidRequest(HttpMessageNotReadableException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, invalidRequestDetail(exception));
+    }
+
+    private String invalidRequestDetail(HttpMessageNotReadableException exception) {
         Throwable cause = exception.getCause();
         while (cause != null) {
             if (cause instanceof MismatchedInputException mismatch) {
-                if (BigDecimal.class.equals(mismatch.getTargetType())) {
-                    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "El monto debe ser un número");
-                }
-                if (String.class.equals(mismatch.getTargetType())) {
-                    for (var field : mismatch.getPath()) {
-                        String name = field.getPropertyName();
-                        if ("monedaOrigen".equals(name) || "monedaDestino".equals(name)) {
-                            return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
-                                    name + " debe ser texto");
-                        }
-                    }
+                String detail = typeErrorDetail(mismatch);
+                if (detail != null) {
+                    return detail;
                 }
             }
             cause = cause.getCause();
         }
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "El cuerpo de la solicitud no es válido");
+        return "El cuerpo de la solicitud no es válido";
+    }
+
+    private String typeErrorDetail(MismatchedInputException mismatch) {
+        if (BigDecimal.class.equals(mismatch.getTargetType())) {
+            return "El monto debe ser un número";
+        }
+        if (String.class.equals(mismatch.getTargetType())) {
+            for (var field : mismatch.getPath()) {
+                String name = field.getPropertyName();
+                if ("monedaOrigen".equals(name) || "monedaDestino".equals(name)) {
+                    return name + " debe ser texto";
+                }
+            }
+        }
+        return null;
     }
 
     @ExceptionHandler(DomainException.class)

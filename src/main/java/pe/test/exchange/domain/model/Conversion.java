@@ -7,6 +7,7 @@ import pe.test.exchange.domain.exception.DomainException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Getter
 @AllArgsConstructor
@@ -49,7 +50,7 @@ public class Conversion {
                 targetCurrency,
                 exchangeRate,
                 convertedAmount,
-                LocalDateTime.now()
+                LocalDateTime.now(ZoneOffset.UTC)
         );
     }
 }

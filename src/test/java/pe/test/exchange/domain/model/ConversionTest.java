@@ -5,10 +5,13 @@ import org.junit.jupiter.api.Test;
 import pe.test.exchange.domain.exception.DomainException;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 public class ConversionTest {
     @Test
@@ -40,9 +43,23 @@ public class ConversionTest {
         assertThrows(DomainException.class, () ->
                 Conversion.create(BigDecimal.ZERO, usd, pen, exchangeRate)
         );
+        BigDecimal negativeAmount = new BigDecimal("-50");
         assertThrows(DomainException.class, () ->
-                Conversion.create(new BigDecimal("-50"), usd, pen, exchangeRate)
+                Conversion.create(negativeAmount, usd, pen, exchangeRate)
         );
+    }
+
+    @Test
+    @DisplayName("Registra la fecha de operación en UTC")
+    void shouldRecordOperationDateInUtc() {
+        LocalDateTime before = LocalDateTime.now(ZoneOffset.UTC);
+
+        Conversion conversion = Conversion.create(new BigDecimal("100"),
+                new CurrencyCode("USD"), new CurrencyCode("PEN"), BigDecimal.ONE);
+
+        LocalDateTime after = LocalDateTime.now(ZoneOffset.UTC);
+        assertFalse(conversion.getOperationDate().isBefore(before));
+        assertFalse(conversion.getOperationDate().isAfter(after));
     }
 
     @Test
