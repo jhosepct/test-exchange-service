@@ -1,6 +1,13 @@
 spring:
   application:
     name: test-exchange-service
+  cloud:
+    openfeign:
+      client:
+        config:
+          exchangeRateApi:
+            connect-timeout: 2000
+            read-timeout: 5000
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
@@ -20,7 +27,7 @@ spring:
 exchange-rate:
   api:
     base-url: https://v6.exchangerate-api.com/v6
-    key: "*****"
+    key: ${EXCHANGE_RATE_API_KEY}
 
 
 #Abre http://localhost:8080/h2-console

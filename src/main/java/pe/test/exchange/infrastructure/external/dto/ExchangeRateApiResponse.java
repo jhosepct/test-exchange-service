@@ -11,6 +11,8 @@ public record ExchangeRateApiResponse(
         @JsonProperty("base_code")
         String baseCode,
         @JsonProperty("conversion_rates")
-        Map<String, BigDecimal> conversionRates
+        Map<String, BigDecimal> conversionRates,
+        @JsonProperty("error-type")
+        String errorType
 ) {
 }
