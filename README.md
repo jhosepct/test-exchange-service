@@ -1,77 +1,50 @@
-# Desafío Técnico – API de Tipo de Cambio
+# API de tipo de cambio
 
-## Descripción
+Microservicio en Java que consulta un tipo de cambio externo, convierte un monto y guarda cada conversión exitosa en H2. La API usa [ExchangeRate-API](https://www.exchangerate-api.com/docs/overview) como proveedor de tasas.
 
-Microservicio en Java para consumir un servicio externo de tipo de cambio y exponer una API REST que permita convertir montos entre distintas monedas.
+## Flujo de conversión
 
----
+![Flujo de conversión de monedas](docs/images/conversión-de-monedas.gif)
 
-## Stack Tecnológico
+El diagrama editable está en [`docs/exchange-service.fluyo.json`](docs/exchange-service.fluyo.json).
 
-| Tecnología | Versión |
-|---|---|
-| Java | 17 |
-| Spring Boot | 4.0.6 |
-| Spring Cloud OpenFeign | 2025.1.1 |
-| H2 (base de datos en memoria) | Runtime |
-| Spring Data JPA | Incluido |
-| Lombok | Incluido |
-| Maven | Wrapper incluido |
+## Tecnologías
 
----
+- Java 17, Spring Boot 4.0.6 y Maven.
+- Spring Cloud OpenFeign 2025.1.1 para consultar el proveedor.
+- Spring Data JPA y H2 en memoria para guardar las conversiones.
+- JUnit, Mockito y MockMvc para las pruebas.
 
-## Lo que ya está configurado
+## Estructura
 
-### Cliente HTTP externo (OpenFeign)
+El proyecto separa el dominio de los detalles de HTTP y persistencia:
 
-El cliente Feign ya está implementado y apuntando a la API pública de tipo de cambio:
-
-- **Interfaz:** `infrastructure/external/ExchangeRateApiClient.java`
-- **DTO de respuesta:** `infrastructure/external/dto/ExchangeRateApiResponse.java`
-- **API usada:** `https://v6.exchangerate-api.com/v6`
-- **Endpoint:** `GET /{apiKey}/latest/{baseCurrency}`
-
-La clase principal ya tiene habilitado `@EnableFeignClients`.
-
-### Base de datos H2
-
-Datasource, JPA y consola H2 listos en `application.yaml`:
-
-| Parámetro | Valor |
-|---|---|
-| JDBC URL | `jdbc:h2:mem:testdb` |
-| Usuario | `sa` |
-| Password | `password` |
-| Consola | `http://localhost:8080/h2-console` |
-| DDL | `update` (auto-creación de tablas) |
-
-### Estructura de paquetes sugerida
-
-```
-pe.test.exchange
-├── domain
-│   ├── model           ← Entidades JPA
-│   ├── repository      ← Interfaces de repositorio
-│   ├── service         ← Contratos de dominio
-│   └── exception       ← Excepciones de dominio
-├── application
-│   ├── controller      ← Endpoints REST
-│   ├── service         ← Lógica de aplicación
-│   └── dto             ← Request / Response
-└── infrastructure
-    ├── external        ← Cliente Feign (YA IMPLEMENTADO)
-    └── persistence     ← Implementaciones de repositorio
+```text
+src/main/java/pe/test/exchange/
+├── domain/          Modelo de conversión, código de moneda, reglas y contratos
+├── application/     Endpoint, DTOs, mapeo y orquestación de la conversión
+└── infrastructure/  Cliente Feign y repositorio JPA/H2
 ```
 
----
+`POST /api/conversion` valida la solicitud, obtiene la tasa, calcula el monto convertido y guarda la operación. Si ambas monedas son iguales, usa tasa `1` **sin consultar al proveedor**, pero también guarda la conversión. En ese caso se comprueba localmente que el código de moneda exista.
 
-## Lo que debes implementar
+## Ejecutar
 
-### 1. Endpoint de conversión
+Necesitas Java 17 o superior y una API key válida de ExchangeRate-API. Configúrala como variable de entorno antes de arrancar:
 
-Exponer `POST /api/conversion` con el siguiente contrato:
+```bash
+export EXCHANGE_RATE_API_KEY=tu_api_key
+bash ./mvnw spring-boot:run
+```
 
-**Request:**
+La aplicación queda en `http://localhost:8080`. `.env.example` sirve de referencia, pero Spring Boot **no carga `.env` automáticamente**. No publiques tu API key.
+
+El cliente Feign `exchangeRateApi` tiene un timeout de conexión de **2 segundos** y uno de lectura de **5 segundos**, configurados en `src/main/resources/application.yaml`.
+
+## API de conversión
+
+`POST /api/conversion` con `Content-Type: application/json`:
+
 ```json
 {
   "monto": 100,
@@ -80,7 +53,8 @@ Exponer `POST /api/conversion` con el siguiente contrato:
 }
 ```
 
-**Response:**
+Una respuesta exitosa (`200 OK`) contiene:
+
 ```json
 {
   "monto": 100,
@@ -91,43 +65,72 @@ Exponer `POST /api/conversion` con el siguiente contrato:
 }
 ```
 
-### 2. Integración con el cliente Feign existente
+**La tasa del ejemplo es ilustrativa:** en una conversión entre monedas distintas, la respuesta utiliza la tasa recibida del proveedor en ese momento.
 
-Usar `ExchangeRateApiClient` para obtener el tipo de cambio real desde:
+- `monto` debe ser un número mayor que cero; admite hasta 15 dígitos enteros y 4 decimales significativos. No se acepta un número enviado como texto.
+- `monedaOrigen` y `monedaDestino` deben ser códigos de tres letras; se admiten minúsculas y se normalizan a mayúsculas. Si el proveedor no admite una moneda, la solicitud se rechaza.
+- El monto convertido se redondea a 2 decimales. Si la tasa o el resultado no pueden guardarse sin exceder la precisión de H2, la operación se rechaza.
 
+Puedes probar el endpoint con la colección [`bruno/`](bruno/): abre esa carpeta en Bruno, selecciona el entorno `local` y ejecuta **Convert currency**. La API key se configura en el backend, no en Bruno.
+
+### Errores
+
+Los errores manejados se devuelven con `status`, `title`, `detail` e `instance` (formato `ProblemDetail`).
+
+| Estado | Cuándo ocurre | Qué hacer |
+|---|---|---|
+| `400 Bad Request` | JSON inválido, tipo de dato incorrecto, monto fuera de los límites o moneda no soportada | Corregir la solicitud según `detail` |
+| `502 Bad Gateway` | El proveedor falla, agota el timeout o devuelve una tasa inválida | Mostrar el mensaje genérico y permitir intentar más tarde |
+
+Ejemplo de `400` para un monto enviado como texto:
+
+```json
+{
+  "detail": "El monto debe ser un número",
+  "instance": "/api/conversion",
+  "status": 400,
+  "title": "Bad Request"
+}
 ```
-https://v6.exchangerate-api.com/v6/{apiKey}/latest/{baseCurrency}
+
+Ejemplo de `502`:
+
+```json
+{
+  "detail": "No fue posible obtener el tipo de cambio en este momento. Inténtalo más tarde",
+  "instance": "/api/conversion",
+  "status": 502,
+  "title": "Bad Gateway"
+}
 ```
 
-La API key se obtiene de la variable de entorno `EXCHANGE_RATE_API_KEY`. Puedes usar `.env.example` como plantilla.
+Un problema interno como una API key inválida **no se expone al cliente**. El backend registra el estado HTTP y el tipo de error del proveedor para diagnóstico, sin registrar la clave ni la URL que la contiene. Para decidir qué mostrar, un frontend puede usar el estado HTTP y `detail`; no debería basar su lógica en comparar textos de mensajes.
 
-### 3. Persistencia
+## Persistencia en H2
 
-Almacenar cada conversión en H2 con los siguientes datos:
+Cada conversión exitosa guarda monto original, monedas, tasa aplicada, monto convertido y fecha de operación en la tabla `conversions`. La fecha se genera en **UTC** y se almacena como `LocalDateTime` (sin zona horaria en la columna); se interpreta como UTC por convención.
 
-- Monto original
-- Moneda origen / destino
-- Tipo de cambio aplicado
-- Monto convertido
-- Fecha de la operación
+Con la aplicación en ejecución, abre `http://localhost:8080/h2-console` y utiliza:
 
----
+| Campo | Valor |
+|---|---|
+| JDBC URL | `jdbc:h2:mem:testdb` |
+| Usuario | `sa` |
+| Contraseña | `password` |
 
-## Consideraciones de Diseño
+```sql
+SELECT id, original_amount, source_currency, target_currency,
+       exchange_rate, converted_amount, operation_date
+FROM conversions
+ORDER BY id DESC;
+```
 
-- Aplicar **Domain-Driven Design (DDD)** con separación clara de capas
-- Manejo adecuado de errores (moneda inválida, servicio externo no disponible)
-- Código limpio y mantenible
+H2 está **en memoria**: los registros desaparecen al detener la aplicación. Una conversión rechazada no se guarda.
 
----
-
-## Cómo ejecutar
-
-Configura la variable de entorno antes de iniciar la aplicación. Por ejemplo:
+## Pruebas
 
 ```bash
-export EXCHANGE_RATE_API_KEY=tu_api_key
-./mvnw spring-boot:run
+bash ./mvnw test
 ```
 
-La aplicación levanta en `http://localhost:8080`.
+Las pruebas usan una clave de prueba y no necesitan una API key real. Cubren cálculo, validación, errores del proveedor, persistencia y timeouts. La prueba del proveedor lento usa un servidor HTTP local y un timeout reducido **solo dentro del test**, para comprobar que un fallo no inserta datos en H2 sin esperar cinco segundos.
