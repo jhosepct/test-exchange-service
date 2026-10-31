@@ -6,6 +6,8 @@ import feign.Response;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -91,6 +93,34 @@ class ConversionFlowIntegrationTest {
     }
 
     @Test
+    @DisplayName("Guarda la conversión entre la misma moneda sin consultar al proveedor")
+    void shouldPersistSameCurrencyWithoutCallingFeign() throws Exception {
+        // Act & Assert
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"monto": 100000000000000, "monedaOrigen": "PEN", "monedaDestino": "PEN"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.monto").value(100000000000000L))
+                .andExpect(jsonPath("$.montoConvertido").value(100000000000000L))
+                .andExpect(jsonPath("$.monedaOrigen").value("PEN"))
+                .andExpect(jsonPath("$.monedaDestino").value("PEN"))
+                .andExpect(jsonPath("$.tipoCambio").value(1));
+
+        verifyNoInteractions(apiClient);
+        var savedConversions = conversionRepository.findAll();
+        assertEquals(1, savedConversions.size());
+        ConversionEntity saved = savedConversions.get(0);
+        assertEquals(new BigDecimal("100000000000000.0000"), saved.getOriginalAmount());
+        assertEquals(new BigDecimal("100000000000000.00"), saved.getConvertedAmount());
+        assertEquals(new BigDecimal("1.000000"), saved.getExchangeRate());
+        assertEquals("PEN", saved.getSourceCurrency());
+        assertEquals("PEN", saved.getTargetCurrency());
+        assertNotNull(saved.getOperationDate());
+    }
+
+    @Test
     @DisplayName("Devuelve 400 cuando la moneda origen no existe en el proveedor")
     void shouldRejectUnsupportedSourceCurrency() throws Exception {
         // Arrange
@@ -130,7 +160,7 @@ class ConversionFlowIntegrationTest {
         mockMvc.perform(post("/api/conversion")
                         .contentType(APPLICATION_JSON)
                         .content("""
-                                {"monto": 120, "monedaOrigen": "ZZZ", "monedaDestino": "ZZZ"}
+                                {"monto": 120, "monedaOrigen": "ZZZ", "monedaDestino": "PEN"}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("La moneda origen no está soportada: ZZZ"));
@@ -167,28 +197,21 @@ class ConversionFlowIntegrationTest {
         assertEquals(0, conversionRepository.count());
     }
 
-    @Test
-    @DisplayName("Rechaza montos que no caben en la base de datos antes de consultar el proveedor")
-    void shouldRejectAmountBeyondStorageLimit() throws Exception {
+    @ParameterizedTest(name = "monto={0}, {1} a {2}")
+    @CsvSource(delimiter = '|', textBlock = """
+            100              | ZZZ | ZZZ
+            1000000000000000 | USD | PEN
+            0.123456         | USD | PEN
+            """)
+    @DisplayName("Rechaza solicitudes inválidas sin consultar al proveedor")
+    void shouldRejectInvalidRequestBeforeCallingProvider(String amount, String source, String target) throws Exception {
+        String request = """
+                {"monto": %s, "monedaOrigen": "%s", "monedaDestino": "%s"}
+                """.formatted(amount, source, target);
+
         mockMvc.perform(post("/api/conversion")
                         .contentType(APPLICATION_JSON)
-                        .content("""
-                                {"monto": 1000000000000000, "monedaOrigen": "USD", "monedaDestino": "PEN"}
-                                """))
-                .andExpect(status().isBadRequest());
-
-        verifyNoInteractions(apiClient);
-        assertEquals(0, conversionRepository.count());
-    }
-
-    @Test
-    @DisplayName("Rechaza montos con más de cuatro decimales")
-    void shouldRejectAmountWithExcessivePrecision() throws Exception {
-        mockMvc.perform(post("/api/conversion")
-                        .contentType(APPLICATION_JSON)
-                        .content("""
-                                {"monto": 0.123456, "monedaOrigen": "USD", "monedaDestino": "PEN"}
-                                """))
+                        .content(request))
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(apiClient);

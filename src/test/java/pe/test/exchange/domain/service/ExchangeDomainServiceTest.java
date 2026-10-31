@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -49,5 +50,21 @@ class ExchangeDomainServiceTest {
         assertEquals(new BigDecimal("350.00"), conversion.getConvertedAmount());
         verify(exchangeRateProvider, times(1))
                 .getExchangeRate(sourceCurrency, targetCurrency);
+    }
+
+    @Test
+    @DisplayName("Usa tasa uno cuando las monedas son iguales sin consultar al proveedor")
+    void shouldConvertSameCurrencyWithoutProvider() {
+        // Arrange
+        BigDecimal amount = new BigDecimal("123.45");
+        CurrencyCode pen = new CurrencyCode("PEN");
+
+        // Act
+        Conversion conversion = exchangeDomainService.performConversion(amount, pen, pen);
+
+        // Assert
+        assertEquals(BigDecimal.ONE, conversion.getExchangeRate());
+        assertEquals(new BigDecimal("123.45"), conversion.getConvertedAmount());
+        verifyNoInteractions(exchangeRateProvider);
     }
 }
