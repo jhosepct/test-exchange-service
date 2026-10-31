@@ -33,50 +33,58 @@ public class ExchangeRateClientAdapter implements ExchangeRateProvider {
 
     @Override
     public BigDecimal getExchangeRate(CurrencyCode sourceCurrency, CurrencyCode targetCurrency) {
-        ExchangeRateApiResponse response;
+        ExchangeRateApiResponse response = fetchRates(sourceCurrency);
+        validateResponse(response, sourceCurrency);
+        return rateFor(response, targetCurrency);
+    }
+
+    private ExchangeRateApiResponse fetchRates(CurrencyCode sourceCurrency) {
         try {
-            response = apiClient.getLatestRates(apiKey, sourceCurrency.value());
+            return apiClient.getLatestRates(apiKey, sourceCurrency.value());
         } catch (FeignException exception) {
             String errorType = providerErrorType(exception);
             log.warn("Error al consultar tipo de cambio: monedaOrigen={} status={} errorType={}",
                     sourceCurrency.value(), exception.status(), errorType);
-            if (exception.status() == 404 && "unsupported-code".equals(errorType)) {
-                throw new DomainException("La moneda origen no está soportada: " + sourceCurrency.value());
-            }
-            throw new ExchangeRateProviderException(
-                    "No se pudo consultar el proveedor de tipo de cambio", errorType, exception);
+            throw providerFailure(sourceCurrency, errorType,
+                    "No se pudo consultar el proveedor de tipo de cambio", exception);
         } catch (RuntimeException exception) {
             log.warn("Error de conexión con el proveedor de tipo de cambio: monedaOrigen={} tipo={}",
                     sourceCurrency.value(), exception.getClass().getSimpleName());
             throw new ExchangeRateProviderException(
-                    "No se pudo consultar el proveedor de tipo de cambio",
-                    CONNECTION_ERROR,
-                    exception);
+                    "No se pudo consultar el proveedor de tipo de cambio", CONNECTION_ERROR, exception);
         }
+    }
 
+    private void validateResponse(ExchangeRateApiResponse response, CurrencyCode sourceCurrency) {
         if (response == null) {
             throw new ExchangeRateProviderException(
                     "El proveedor devolvió una respuesta vacía", INVALID_RESPONSE);
         }
-
         if (!"success".equals(response.result())) {
-            String errorType = response.errorType() == null
-                    ? UNKNOWN_ERROR
-                    : response.errorType();
+            String errorType = response.errorType() == null ? UNKNOWN_ERROR : response.errorType();
             log.warn("Respuesta de error del proveedor: monedaOrigen={} errorType={}",
                     sourceCurrency.value(), errorType);
-            if ("unsupported-code".equals(errorType)) {
-                throw new DomainException("La moneda origen no está soportada: " + sourceCurrency.value());
-            }
-            throw new ExchangeRateProviderException(
-                    "El proveedor rechazó la consulta", errorType);
+            throw providerFailure(sourceCurrency, errorType, "El proveedor rechazó la consulta", null);
         }
-
         if (response.conversionRates() == null) {
             throw new ExchangeRateProviderException(
                     "El proveedor devolvió una respuesta sin tasas", INVALID_RESPONSE);
         }
+    }
 
+    private RuntimeException providerFailure(CurrencyCode sourceCurrency, String errorType,
+                                             String message, Throwable cause) {
+        boolean unsupportedSource = "unsupported-code".equals(errorType)
+                && (cause == null || cause instanceof FeignException feign && feign.status() == 404);
+        if (unsupportedSource) {
+            return new DomainException("La moneda origen no está soportada: " + sourceCurrency.value());
+        }
+        return cause == null
+                ? new ExchangeRateProviderException(message, errorType)
+                : new ExchangeRateProviderException(message, errorType, cause);
+    }
+
+    private BigDecimal rateFor(ExchangeRateApiResponse response, CurrencyCode targetCurrency) {
         BigDecimal exchangeRate = response.conversionRates().get(targetCurrency.value());
         if (exchangeRate == null) {
             throw new ExchangeRateNotFoundException(
@@ -88,7 +96,6 @@ public class ExchangeRateClientAdapter implements ExchangeRateProvider {
             throw new ExchangeRateProviderException(
                     "El proveedor devolvió un tipo de cambio inválido", INVALID_RESPONSE);
         }
-
         return exchangeRate;
     }
 

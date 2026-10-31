@@ -134,6 +134,63 @@ class ExchangeRateClientAdapterTest {
     }
 
     @Test
+    @DisplayName("Mantiene el error del proveedor aunque no reconozca su tipo")
+    void shouldHandleUnknownProviderError() {
+        Request request = Request.create(Request.HttpMethod.GET,
+                "https://example.com/latest/USD", Map.of(), null, StandardCharsets.UTF_8);
+        Response response = Response.builder()
+                .status(429)
+                .reason("Too Many Requests")
+                .request(request)
+                .body("{\"result\":\"error\",\"error-type\":\"temporary-limit\"}", StandardCharsets.UTF_8)
+                .build();
+        when(apiClient.getLatestRates(TEST_API_KEY, "USD"))
+                .thenThrow(FeignException.errorStatus("getLatestRates", response));
+
+        CurrencyCode sourceCurrency = new CurrencyCode("USD");
+        CurrencyCode targetCurrency = new CurrencyCode("PEN");
+        ExchangeRateProviderException exception = assertThrows(ExchangeRateProviderException.class,
+                () -> adapter.getExchangeRate(sourceCurrency, targetCurrency));
+
+        assertEquals("temporary-limit", exception.getErrorType());
+    }
+
+    @Test
+    @DisplayName("No trata como moneda inválida un fallo HTTP distinto de 404")
+    void shouldNotTreatOtherHttpErrorsAsUnsupportedCurrency() {
+        Request request = Request.create(Request.HttpMethod.GET,
+                "https://example.com/latest/USD", Map.of(), null, StandardCharsets.UTF_8);
+        Response response = Response.builder()
+                .status(503)
+                .reason("Service Unavailable")
+                .request(request)
+                .body("{\"result\":\"error\",\"error-type\":\"unsupported-code\"}", StandardCharsets.UTF_8)
+                .build();
+        when(apiClient.getLatestRates(TEST_API_KEY, "USD"))
+                .thenThrow(FeignException.errorStatus("getLatestRates", response));
+
+        CurrencyCode sourceCurrency = new CurrencyCode("USD");
+        CurrencyCode targetCurrency = new CurrencyCode("PEN");
+        ExchangeRateProviderException exception = assertThrows(ExchangeRateProviderException.class,
+                () -> adapter.getExchangeRate(sourceCurrency, targetCurrency));
+
+        assertEquals("unsupported-code", exception.getErrorType());
+    }
+
+    @Test
+    @DisplayName("Rechaza una respuesta vacía del proveedor")
+    void shouldRejectEmptyProviderResponse() {
+        CurrencyCode sourceCurrency = new CurrencyCode("USD");
+        CurrencyCode targetCurrency = new CurrencyCode("PEN");
+        when(apiClient.getLatestRates(TEST_API_KEY, "USD")).thenReturn(null);
+
+        ExchangeRateProviderException exception = assertThrows(ExchangeRateProviderException.class,
+                () -> adapter.getExchangeRate(sourceCurrency, targetCurrency));
+
+        assertEquals("invalid-response", exception.getErrorType());
+    }
+
+    @Test
     @DisplayName("Lanza una excepción cuando falla la consulta al proveedor")
     void shouldWrapClientFailure() {
         // Arrange
