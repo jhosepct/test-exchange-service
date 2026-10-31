@@ -8,7 +8,7 @@ import pe.test.exchange.domain.repository.ExchangeRateProvider;
 
 import java.math.BigDecimal;
 
-//@Service
+@Service
 @RequiredArgsConstructor
 public class ExchangeDomainService {
 
