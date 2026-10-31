@@ -4,7 +4,7 @@ Microservicio en Java que consulta un tipo de cambio externo, convierte un monto
 
 ## Flujo de conversión
 
-![Flujo de conversión de monedas](docs/images/conversión-de-monedas.gif)
+![Flujo de conversión de monedas](docs/images/conversion-de-monedas.gif)
 
 El diagrama editable está en [`docs/exchange-service.fluyo.json`](docs/exchange-service.fluyo.json).
 
