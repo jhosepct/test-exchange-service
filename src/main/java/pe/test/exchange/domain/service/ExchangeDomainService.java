@@ -16,6 +16,7 @@ public class ExchangeDomainService {
 
     public Conversion performConversion(BigDecimal amount, CurrencyCode sourceCurrency,
                                         CurrencyCode targetCurrency) {
+        Conversion.validateAmount(amount);
         BigDecimal exchangeRate = exchangeRateProvider.getExchangeRate(sourceCurrency, targetCurrency);
         return Conversion.create(amount, sourceCurrency, targetCurrency, exchangeRate);
     }

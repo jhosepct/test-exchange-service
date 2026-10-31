@@ -107,6 +107,81 @@ class ConversionControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.detail").value("No se pudo consultar el proveedor"));
+                .andExpect(jsonPath("$.detail").value(
+                        "No fue posible obtener el tipo de cambio en este momento. Inténtalo más tarde"));
+    }
+
+    @Test
+    @DisplayName("Devuelve el mismo formato de error cuando el JSON está mal formado")
+    void shouldReturnProblemDetailForInvalidJson() throws Exception {
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"monto\":"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("El cuerpo de la solicitud no es válido"));
+    }
+
+    @Test
+    @DisplayName("Rechaza un monto enviado como texto")
+    void shouldRejectAmountAsString() throws Exception {
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"monto":"100","monedaOrigen":"USD","monedaDestino":"PEN"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("El monto debe ser un número"));
+    }
+
+    @Test
+    @DisplayName("Indica que monedaOrigen debe ser texto")
+    void shouldRejectSourceCurrencyAsNumber() throws Exception {
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"monto":123,"monedaOrigen":3122,"monedaDestino":"USD"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("monedaOrigen debe ser texto"));
+    }
+
+    @Test
+    @DisplayName("Indica que monedaDestino debe ser texto")
+    void shouldRejectTargetCurrencyAsBoolean() throws Exception {
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"monto":123,"monedaOrigen":"PEN","monedaDestino":true}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("monedaDestino debe ser texto"));
+    }
+
+    @Test
+    @DisplayName("Mantiene el error de formato para un código de moneda escrito como texto")
+    void shouldRejectInvalidCurrencyCode() throws Exception {
+        when(applicationService.convertCurrency(any()))
+                .thenThrow(new DomainException("El código de moneda debe tener exactamente 3 letras ISO (ej. USD, PEN)"));
+
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"monto":123,"monedaOrigen":"US","monedaDestino":"PEN"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(
+                        "El código de moneda debe tener exactamente 3 letras ISO (ej. USD, PEN)"));
+    }
+
+    @Test
+    @DisplayName("Identifica el monto si se envía como arreglo")
+    void shouldRejectAmountAsArray() throws Exception {
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"monto":[],"monedaOrigen":"USD","monedaDestino":"PEN"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("El monto debe ser un número"));
     }
 }
