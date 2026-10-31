@@ -1,6 +1,13 @@
 spring:
   application:
     name: test-exchange-service
+  cloud:
+    openfeign:
+      client:
+        config:
+          exchangeRateApi:
+            connect-timeout: 2000
+            read-timeout: 5000
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver

@@ -3,6 +3,7 @@ package pe.test.exchange.application;
 import feign.FeignException;
 import feign.Request;
 import feign.Response;
+import feign.RetryableException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,11 +20,13 @@ import pe.test.exchange.infrastructure.external.dto.ExchangeRateApiResponse;
 import pe.test.exchange.infrastructure.persistence.JpaConversionRepository;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -215,6 +218,28 @@ class ConversionFlowIntegrationTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(apiClient);
+        assertEquals(0, conversionRepository.count());
+    }
+
+    @Test
+    @DisplayName("No guarda la conversión si el proveedor agota el tiempo de espera")
+    void shouldReturnBadGatewayWithoutSavingOnTimeout() throws Exception {
+        Request request = Request.create(Request.HttpMethod.GET,
+                "https://example.com/latest/USD", Map.of(), null, StandardCharsets.UTF_8);
+        when(apiClient.getLatestRates("test-api-key", "USD"))
+                .thenThrow(new RetryableException(-1, "Read timed out", Request.HttpMethod.GET,
+                        new SocketTimeoutException("Read timed out"), (Long) null, request));
+
+        mockMvc.perform(post("/api/conversion")
+                        .contentType(APPLICATION_JSON)
+                        .content("""
+                                {"monto": 100, "monedaOrigen": "USD", "monedaDestino": "PEN"}
+                                """))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.detail").value(
+                        "No fue posible obtener el tipo de cambio en este momento. Inténtalo más tarde"));
+
+        verify(apiClient).getLatestRates("test-api-key", "USD");
         assertEquals(0, conversionRepository.count());
     }
 
