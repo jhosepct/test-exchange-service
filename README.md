@@ -99,7 +99,7 @@ Usar `ExchangeRateApiClient` para obtener el tipo de cambio real desde:
 https://v6.exchangerate-api.com/v6/{apiKey}/latest/{baseCurrency}
 ```
 
-La API key ya está configurada en `application.yaml` bajo `exchange-rate.api.key`.
+La API key se obtiene de la variable de entorno `EXCHANGE_RATE_API_KEY`. Puedes usar `.env.example` como plantilla.
 
 ### 3. Persistencia
 
@@ -123,7 +123,10 @@ Almacenar cada conversión en H2 con los siguientes datos:
 
 ## Cómo ejecutar
 
+Configura la variable de entorno antes de iniciar la aplicación. Por ejemplo:
+
 ```bash
+export EXCHANGE_RATE_API_KEY=tu_api_key
 ./mvnw spring-boot:run
 ```
 

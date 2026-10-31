@@ -20,7 +20,7 @@ spring:
 exchange-rate:
   api:
     base-url: https://v6.exchangerate-api.com/v6
-    key: "*****"
+    key: ${EXCHANGE_RATE_API_KEY}
 
 
 #Abre http://localhost:8080/h2-console
